@@ -419,11 +419,17 @@ export default function App() {
                       isLastMove={lastAiMove?.r === r && lastAiMove?.c === c}
                       placementPreview={
                         phase === 'placement' && 
-                        hoveredCell?.r === r && 
-                        hoveredCell?.c === c && 
-                        canPlaceShip(playerGrid, r, c, playerShips[selectedShipIndex].length, orientation)
-                          ? { length: playerShips[selectedShipIndex].length, orientation }
-                          : undefined
+                        hoveredCell && 
+                        (() => {
+                          const ship = playerShips[selectedShipIndex];
+                          if (!canPlaceShip(playerGrid, hoveredCell.r, hoveredCell.c, ship.length, orientation)) return false;
+                          
+                          if (orientation === 'horizontal') {
+                            return r === hoveredCell.r && c >= hoveredCell.c && c < hoveredCell.c + ship.length;
+                          } else {
+                            return c === hoveredCell.c && r >= hoveredCell.r && r < hoveredCell.r + ship.length;
+                          }
+                        })()
                       }
                     />
                   ))
@@ -667,7 +673,7 @@ function CellView({
   isPlayer?: boolean;
   disabled?: boolean;
   isLastMove?: boolean;
-  placementPreview?: { length: number; orientation: 'horizontal' | 'vertical' };
+  placementPreview?: boolean;
 }) {
   const getStatusColor = () => {
     switch (cell.status) {
