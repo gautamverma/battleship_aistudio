@@ -1,12 +1,16 @@
 package com.galacticfleet.game
 
 import android.os.Bundle
+import android.media.AudioManager
+import android.media.ToneGenerator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -15,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,9 +60,9 @@ fun GalacticFleetGame() {
             )
             
             if (phase == GamePhase.PLACEMENT) {
-                androidx.compose.material3.Button(
+                Button(
                     onClick = { orientation = if (orientation == Orientation.HORIZONTAL) Orientation.VERTICAL else Orientation.HORIZONTAL },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
                 ) {
                     Text(text = orientation.name, color = Color.White, fontSize = 10.sp)
                 }
@@ -79,12 +84,21 @@ fun GalacticFleetGame() {
                                 if (cell.shipType == shipType) cell.status = CellStatus.HIT
                             }
                         }
+                        aiShips.find { it.type == shipType }?.let { it.hits = it.length }
                         message = "CRITICAL HIT! ENEMY DESTROYED!"
+                        playExplosionSound()
                     } else {
                         aiGrid[r][c].status = CellStatus.MISS
                         message = "TURBOLASER MISSED."
+                        playMissSound()
                     }
-                    currentTurn = "ai"
+                    
+                    if (aiShips.all { it.isSunk }) {
+                        phase = GamePhase.GAME_OVER
+                        message = "VICTORY! THE EMPIRE HAS FALLEN."
+                    } else {
+                        currentTurn = "ai"
+                    }
                 }
             }
         }
@@ -127,6 +141,60 @@ fun GalacticFleetGame() {
             }
         }
     }
+
+    // AI Move Logic
+    if (phase == GamePhase.PLAYING && currentTurn == "ai") {
+        LaunchedEffect(currentTurn) {
+            delay(1200)
+            val move = engine.getSmartAiMove(playerGrid, aiMemory)
+            val cell = playerGrid[move.r][move.c]
+            
+            if (cell.status == CellStatus.SHIP) {
+                val shipType = cell.shipType!!
+                playerGrid.forEach { row ->
+                    row.forEach { c ->
+                        if (c.shipType == shipType) c.status = CellStatus.HIT
+                    }
+                }
+                playerShips.find { it.type == shipType }?.let { it.hits = it.length }
+                message = "ALERT! OUR FLEET HAS BEEN HIT!"
+                playExplosionSound()
+                
+                aiMemory.lastHit = move
+                aiMemory.huntMode = false
+                engine.getAdjacentCells(move).forEach { adj ->
+                    if (playerGrid[adj.r][adj.c].status == CellStatus.EMPTY || playerGrid[adj.r][adj.c].status == CellStatus.SHIP) {
+                        aiMemory.targets.add(adj)
+                    }
+                }
+            } else {
+                playerGrid[move.r][move.c].status = CellStatus.MISS
+                message = "ENEMY TURBOLASER MISSED."
+                playMissSound()
+            }
+            
+            if (playerShips.all { it.isSunk }) {
+                phase = GamePhase.GAME_OVER
+                message = "DEFEAT! THE REBELLION IS CRUSHED."
+            } else {
+                currentTurn = "player"
+            }
+        }
+    }
+}
+
+fun playExplosionSound() {
+    try {
+        val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+        toneG.startTone(ToneGenerator.TONE_CDMA_LOW_L, 500)
+    } catch (e: Exception) {}
+}
+
+fun playMissSound() {
+    try {
+        val toneG = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+        toneG.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+    } catch (e: Exception) {}
 }
 
 @Composable
